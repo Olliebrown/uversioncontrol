@@ -212,8 +212,8 @@ namespace UVC
                             Directory.CreateDirectory(tempDirectory);
                         string convertedBaseFile = tempDirectory + Path.GetFileName(assetPath) + ".svn-base";
                         string convertedWorkingCopyFile = tempDirectory + Path.GetFileName(assetPath) + ".svn-wc";
-                        var baseConvertCommand = new CommandLineExecution.CommandLine(GetBinaryConverterPath(), baseAssetPath + " "  + convertedBaseFile, ".").Execute();
-                        var workingCopyConvertCommand = new CommandLineExecution.CommandLine(GetBinaryConverterPath(), assetPath + " " + convertedWorkingCopyFile, ".").Execute();
+                        //var baseConvertCommand = new CommandLineExecution.CommandLine(GetBinaryConverterPath(), baseAssetPath + " "  + convertedBaseFile, ".").Execute();
+                        //var workingCopyConvertCommand = new CommandLineExecution.CommandLine(GetBinaryConverterPath(), assetPath + " " + convertedWorkingCopyFile, ".").Execute();
                         EditorUtility.InvokeDiffTool("Working Base : " + convertedWorkingCopyFile, convertedBaseFile, "Working Copy : " + convertedWorkingCopyFile, convertedWorkingCopyFile, convertedWorkingCopyFile, convertedBaseFile);
                     }
                     else

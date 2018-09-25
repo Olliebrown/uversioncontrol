@@ -47,8 +47,8 @@ namespace UVC.Backend.SVN
     
     public static class SVNStatusXMLParser
     {
-        private static readonly ComposedString dot = new ComposedString(".");
-        private static readonly ComposedString slash = new ComposedString("/");
+        //private static readonly ComposedString dot = new ComposedString(".");
+        //private static readonly ComposedString slash = new ComposedString("/");
         public static StatusDatabase SVNParseStatusXML(string svnStatusXML)
         {
             var xmlStatusDocument = new XmlDocument();

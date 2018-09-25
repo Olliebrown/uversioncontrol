@@ -50,7 +50,7 @@ namespace UVC.UserInterface
             else
             {
                 var objectIndirection = ObjectUtilities.GetObjectIndirection(obj);
-                string sceneAssetPath = ObjectUtilities.ObjectToAssetPath(obj, false);
+                //string sceneAssetPath = ObjectUtilities.ObjectToAssetPath(obj, false);
                 //DrawIcon(selectionRect, IconUtils.childIcon, sceneAssetPath, null, -20f);
 
                 if (ObjectUtilities.ChangesStoredInPrefab(obj) && VCSettings.PrefabGUI)
