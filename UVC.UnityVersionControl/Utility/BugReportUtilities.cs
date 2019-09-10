@@ -1,10 +1,9 @@
-﻿// Copyright (c) <2018>
+// Copyright (c) <2018>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System;
-using UnityEditor;
 using UnityEngine;
-using UVC;
+using UnityEngine.Networking;
 using UVC.Logging;
 
 internal static class FogbugzUtilities
@@ -23,24 +22,18 @@ internal static class FogbugzUtilities
 
     public static void SubmitBug(string url, string username, string project, string area, string description, string extra, string email, bool forceNewBug = false, int retryCount = 0)
     {
-        string bugUrl = string.Format("{0}?Description={1}&Extra={2}&Email={3}&ScoutUserName={4}&ScoutProject={5}&ScoutArea={6}&ForceNewBug={7}",
-            url,
-            WWW.EscapeURL(description),
-            WWW.EscapeURL(extra),
-            WWW.EscapeURL(email),
-            WWW.EscapeURL(username),
-            WWW.EscapeURL(project),
-            WWW.EscapeURL(area),
-            (forceNewBug ? "1" : "0")
-        );
-        
-        var www = new WWW(bugUrl);
-        ContinuationManager.Add(() => www.isDone, () =>
+        string bugUrl =
+            $"{url}?Description={UnityWebRequest.EscapeURL(description)}&Extra={UnityWebRequest.EscapeURL(extra)}&Email={UnityWebRequest.EscapeURL(email)}&ScoutUserName={UnityWebRequest.EscapeURL(username)}&ScoutProject={UnityWebRequest.EscapeURL(project)}&ScoutArea={UnityWebRequest.EscapeURL(area)}&ForceNewBug={(forceNewBug ? "1" : "0")}";
+
+        var form = new WWWForm();
+        var request = UnityWebRequest.Post(url, form);
+        var asyncOperation = request.SendWebRequest();
+        ContinuationManager.Add(() => asyncOperation.isDone, () =>
         {
-            bool success = string.IsNullOrEmpty(www.error) && www.text.Contains("<Success>");
+            bool success = string.IsNullOrEmpty(request.error);
             if (success)
             {
-                D.Log("Bug successfully reported to the 'Unity Version Control' FogBugz database.");
+                DebugLog.Log("Bug successfully reported to the 'Unity Version Control' FogBugz database.");
             }
             else
             {
@@ -50,7 +43,7 @@ internal static class FogbugzUtilities
                 }
                 else
                 {
-                    D.LogError("Bug report failed:\n" + www.error);
+                    DebugLog.LogError("Bug report failed:\n" + request.error);
                 }
             }
         });
@@ -61,7 +54,7 @@ internal static class GitHubUtilities
 {
     public static void OpenNewIssueInBrowser(string user, string repo)
     {
-        var url = string.Format("https://github.com/{0}/{1}/issues/new", user, repo);
+        var url = $"https://github.com/{user}/{repo}/issues/new";
         try
         {
             System.Diagnostics.Process.Start(url);

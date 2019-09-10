@@ -1,15 +1,13 @@
-﻿// Copyright (c) <2017> <Playdead>
+// Copyright (c) <2017> <Playdead>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using UnityEditor;
 using UnityEngine;
 
 namespace UVC.UserInterface
 {
-    using Logging;
     public static class IconUtils
     {
         // Const

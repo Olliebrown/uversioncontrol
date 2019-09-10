@@ -3,84 +3,71 @@
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Experimental.SceneManagement;
+using UVC.Extensions;
 
 namespace UVC
 {
     public static class PrefabHelper
     {
-        #region UnityEditorProxys
-        public static PrefabType GetPrefabType(Object obj) { return PrefabUtility.GetPrefabType(obj); }
-        public static Object GetPrefabParent(Object obj) { return PrefabUtility.GetCorrespondingObjectFromSource(obj); }
-        public static GameObject FindPrefabRoot(GameObject go) { return PrefabUtility.FindPrefabRoot(go); }
-        public static Object InstantiatePrefab(Object obj) { return PrefabUtility.InstantiatePrefab(obj); }
-        public static bool ReconnectToLastPrefab(GameObject go) { return PrefabUtility.ReconnectToLastPrefab(go); }
-        #endregion
-
         public static bool IsPrefabParent(Object go)
         {
             if (!go) return false;
-            PrefabType pbtype = GetPrefabType(go);
-            bool isPrefabParent =
-                pbtype == PrefabType.ModelPrefab ||
-                pbtype == PrefabType.Prefab;
-
-            return isPrefabParent;
+            return go == PrefabUtility.GetCorrespondingObjectFromSource(go);
         }
 
         public static bool IsPrefabRoot(Object obj)
         {
             var gameObject = obj as GameObject;
-            if (gameObject && IsPrefab(obj))
+            if (gameObject && PrefabUtility.GetPrefabAssetType(obj) != PrefabAssetType.NotAPrefab)
             {
-                return FindPrefabRoot(gameObject) == gameObject;
+                return PrefabUtility.GetOutermostPrefabInstanceRoot(gameObject) == gameObject;
             }
             return false;
         }
 
-        public static bool IsPrefab(Object obj, bool includeRegular = true, bool includeModels = true, bool includeDisconnected = true)
+        public static bool IsPrefab(Object obj, bool includeRegular = true, bool includeModels = true)
         {
             if (!obj) return false;
-            PrefabType pbtype = GetPrefabType(obj);
-            bool isPrefab =
-                (includeRegular && pbtype == PrefabType.Prefab) ||
-                (includeRegular && pbtype == PrefabType.PrefabInstance) ||
-                (includeRegular && includeDisconnected && pbtype == PrefabType.DisconnectedPrefabInstance) ||
-                (includeModels && pbtype == PrefabType.ModelPrefab) ||
-                (includeModels && pbtype == PrefabType.ModelPrefabInstance) ||
-                (includeModels && includeDisconnected && pbtype == PrefabType.DisconnectedModelPrefabInstance);
-            return isPrefab;
+            var assetType = PrefabUtility.GetPrefabAssetType(obj);
+            return
+                (includeRegular && assetType == PrefabAssetType.Regular || assetType == PrefabAssetType.Variant || assetType == PrefabAssetType.MissingAsset) ||
+                (includeModels && assetType == PrefabAssetType.Model);
         }
 
-        public static GameObject DisconnectPrefab(GameObject gameObject)
+        public static bool IsPartofPrefabStage(GameObject gameObject)
         {
-            // instantiate prefab at prefab location, remove original prefab instance.
-            var prefabRoot = FindPrefabRoot(gameObject);
-            string prefabName = prefabRoot.name;
-
-            var replacedPrefab = Object.Instantiate(prefabRoot, prefabRoot.transform.position, prefabRoot.transform.rotation) as GameObject;
-            Undo.RegisterCreatedObjectUndo(replacedPrefab, "Disconnect Prefab");
-            replacedPrefab.name = prefabName;
-            replacedPrefab.transform.parent = prefabRoot.transform.parent;
-
-            Undo.DestroyObjectImmediate(prefabRoot);
-            return replacedPrefab;
+            if (PrefabStageUtility.GetCurrentPrefabStage() == null)
+                return false;
+            
+            return PrefabStageUtility.GetCurrentPrefabStage().IsPartOfPrefabContents(gameObject);
         }
 
-        public static void SelectPrefab(GameObject gameObject)
+        public static bool IsAssetPathOpenAsPrefabStage(string assetpath)
         {
-            var prefabParent = GetPrefabParent(FindPrefabRoot(gameObject)) as GameObject;
-            Selection.activeGameObject = prefabParent;
-            EditorGUIUtility.PingObject(Selection.activeGameObject);
+            if (PrefabStageUtility.GetCurrentPrefabStage() == null)
+                return false;
+            
+            return PrefabStageUtility.GetCurrentPrefabStage().prefabAssetPath == assetpath;
+        }
+
+        public static void SaveOpenPrefabStage()
+        {
+            if (PrefabStageUtility.GetCurrentPrefabStage() == null)
+                return;
+
+            typeof(PrefabStage).GetMethod("SavePrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(PrefabStageUtility.GetCurrentPrefabStage(), null);
         }
 
         public static void ApplyPrefab(GameObject prefabInstance)
         {
-            GameObject go = PrefabUtility.FindRootGameObjectWithSameParentPrefab(prefabInstance);
-            var prefabParent = GetPrefabParent(prefabInstance) as GameObject;
-            if (prefabParent && GetPrefabType(prefabParent) == PrefabType.Prefab)
+            GameObject go = PrefabUtility.GetOutermostPrefabInstanceRoot(prefabInstance);
+            var prefabParent = PrefabUtility.GetCorrespondingObjectFromSource(go);
+            var prefabtype = PrefabUtility.GetPrefabAssetType(prefabParent);
+            if (prefabParent && (prefabtype == PrefabAssetType.Regular || prefabtype == PrefabAssetType.Variant))
             {
                 Undo.RecordObject(go, "Apply Prefab");
-                PrefabUtility.ReplacePrefab(go, prefabParent, ReplacePrefabOptions.ConnectToPrefab);
+                PrefabUtility.SaveAsPrefabAssetAndConnect(go, prefabParent.GetAssetPath(), InteractionMode.AutomatedAction);
             }
         }
     }

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Xml;
 using CommandLineExecution;
 using System.Timers;
 
@@ -26,38 +25,38 @@ namespace UVC.Backend.P4
             }
         }
 
-        // Custom comparer for the QueueItem class 
+        // Custom comparer for the QueueItem class
         class P4QueueItemComparer : IEqualityComparer<P4QueueItem>
         {
-            // P4QueueItems are equal if their status levels and paths are equal. 
+            // P4QueueItems are equal if their status levels and paths are equal.
             public bool Equals(P4QueueItem x, P4QueueItem y)
             {
-                //Check whether the compared objects reference the same data. 
+                //Check whether the compared objects reference the same data.
                 if (Object.ReferenceEquals(x, y)) return true;
 
-                //Check whether any of the compared objects is null. 
+                //Check whether any of the compared objects is null.
                 if (Object.ReferenceEquals(x, null) || Object.ReferenceEquals(y, null))
                     return false;
 
-                //Check whether the P4QueueItem's properties are equal. 
+                //Check whether the P4QueueItem's properties are equal.
                 return x.level == y.level && x.path == y.path;
             }
 
-            // If Equals() returns true for a pair of objects  
-            // then GetHashCode() must return the same value for these objects. 
+            // If Equals() returns true for a pair of objects
+            // then GetHashCode() must return the same value for these objects.
 
             public int GetHashCode(P4QueueItem item)
             {
-                //Check whether the object is null 
+                //Check whether the object is null
                 if (Object.ReferenceEquals(item, null)) return 0;
 
-                //Get hash code for the path field if it is not null. 
+                //Get hash code for the path field if it is not null.
                 int hashItemPath = item.path == null ? 0 : item.path.GetHashCode();
 
-                //Get hash code for the level field. 
+                //Get hash code for the level field.
                 int hashItemLevel = item.level.GetHashCode();
 
-                //Calculate the hash code for the product. 
+                //Calculate the hash code for the product.
                 return hashItemPath ^ hashItemLevel;
             }
 
@@ -81,7 +80,7 @@ namespace UVC.Backend.P4
         private volatile bool refreshLoopActive = false;
         private volatile bool requestRefreshLoopStop = false;
         private DirectoryCrawler dirStatus = new DirectoryCrawler();
-        private List<P4QueueItem> p4OpQueue = new List<P4QueueItem>();	// not using a Queue<> because we need to insert high-priority items
+        private List<P4QueueItem> p4OpQueue = new List<P4QueueItem>();    // not using a Queue<> because we need to insert high-priority items
 
         public P4Commands()
         {
@@ -135,7 +134,7 @@ namespace UVC.Backend.P4
             catch (AppDomainUnloadedException) { }
             catch (Exception e)
             {
-                D.ThrowException(e);
+                DebugLog.ThrowException(e);
             }
             if (!requestRefreshLoopStop) RefreshLoop();
         }
@@ -393,6 +392,11 @@ namespace UVC.Backend.P4
             }
         }
 
+        public InfoStatus GetInfo(string path)
+        {
+            return null;
+        }
+
         public bool GetStatus(StatusLevel statusLevel, string fstatArgs, string path)
         {
             //D.Log( "Processing " + path );
@@ -478,7 +482,7 @@ namespace UVC.Backend.P4
             }
             catch (Exception e)
             {
-                D.ThrowException(e);
+                DebugLog.ThrowException(e);
                 return false;
             }
 
@@ -559,7 +563,7 @@ namespace UVC.Backend.P4
                         // let all scenes through so that the scene view GUI is updated as quickly as possible
                         if (!a.ToLower().EndsWith(".unity"))
                         {
-                            // single file - make sure it's not already covered by a directory in the queue (or if it's a sibling of 
+                            // single file - make sure it's not already covered by a directory in the queue (or if it's a sibling of
                             // something already in there, remove that item and check the whole directory instead)
                             string qItemPath = "//" + P4Util.Instance.Vars.clientSpec + diffRootToWorking + "/" + a.Replace("//", "/");
                             int lastIndexOfSlash = qItemPath.LastIndexOf("/");
@@ -583,7 +587,7 @@ namespace UVC.Backend.P4
                                             // this is a sibling of the desired item, flag it for removal
                                             itemToRemove = item;
 
-                                            // add the entire directory instead and continue (don't worry about duplicate adds, the 
+                                            // add the entire directory instead and continue (don't worry about duplicate adds, the
                                             // Distinct() call below will filter them out
                                             a = a.Substring(0, a.LastIndexOf("/") + 1) + "*";
                                             break;
@@ -719,15 +723,21 @@ namespace UVC.Backend.P4
                         if (currentReflectionLevel == VCReflectionLevel.Repository) AddToRemoteStatusQueue(assetIt);
                         else if (currentReflectionLevel == VCReflectionLevel.Local) AddToLocalStatusQueue(assetIt);
                         else if (currentReflectionLevel == VCReflectionLevel.None) AddToLocalStatusQueue(assetIt);
-                        else D.LogWarning("Unhandled previous state");
+                        else DebugLog.LogWarning("Unhandled previous state");
                     }
                 }
             }
             SetPending(assets);
             return true;
         }
-
+       
         public bool Update(IEnumerable<string> assets = null)
+        {
+            if (assets == null || !assets.Any()) assets = new[] { P4Util.Instance.Vars.workingDirectory };
+            return CreateAssetOperation("update", assets);
+        }
+        
+        public bool Update(int revision, IEnumerable<string> assets = null)
         {
             if (assets == null || !assets.Any()) assets = new[] { P4Util.Instance.Vars.workingDirectory };
             return CreateAssetOperation("update", assets);
@@ -773,6 +783,10 @@ namespace UVC.Backend.P4
                 success &= String.IsNullOrEmpty(statusCommandLineOutput.ErrorStr);
             }
             return success;
+        }
+        public virtual bool Commit(string commitMessage = "")
+        {
+            return true;
         }
 
         private void UpdateAfterOperation(IEnumerable<string> assets)
@@ -842,9 +856,49 @@ namespace UVC.Backend.P4
             return true;
         }
 
+        public bool CreateBranch(string from, string to)
+        {
+            return true;
+        }
+
+        public bool MergeBranch(string url, string path = "")
+        {
+            return true;
+        }
+
+        public bool SwitchBranch(string url, string path = "")
+        {
+            return true;
+        }
+
+        public string GetCurrentBranch()
+        {
+            return null;
+        }
+
+        public virtual string GetBranchDefaultPath()
+        {
+            return null;
+        }
+
+        public virtual string GetTrunkPath()
+        {
+            return null;
+        }
+
+        public List<BranchStatus> RemoteList(string path)
+        {
+            return null;
+        }
+
         public bool AllowLocalEdit(IEnumerable<string> assets)
         {
             return CreateAssetOperation("edit", assets);
+        }
+
+        public bool SetLocalOnly(IEnumerable<string> assets)
+        {
+            return true;
         }
 
         public bool Resolve(IEnumerable<string> assets, ConflictResolution conflictResolution)
@@ -865,20 +919,20 @@ namespace UVC.Backend.P4
 
         public bool SetIgnore(string path, IEnumerable<string> assets)
         {
-            D.LogWarning("P4Commands.SetIgnore not implemented");
+            DebugLog.LogWarning("P4Commands.SetIgnore not implemented");
             return false;
         }
 
         public IEnumerable<string> GetIgnore(string path)
         {
-            D.LogWarning("P4Commands.GetIgnore not implemented");
+            DebugLog.LogWarning("P4Commands.GetIgnore not implemented");
             return null;
         }
 
-        public string GetRevision()
+        public int GetRevision()
         {
-            D.LogWarning("P4Commands.GetRevisionNumber not implemented");
-            return null;
+            DebugLog.LogWarning("P4Commands.GetRevisionNumber not implemented");
+            return 0;
         }
 
         public string GetBasePath(string assetPath)
@@ -893,11 +947,11 @@ namespace UVC.Backend.P4
             return "";
         }
 
-        public bool GetConflict(string assetPath, out string basePath, out string mine, out string theirs)
+        public bool GetConflict(string assetPath, out string basePath, out string yours, out string theirs)
         {
-            D.LogWarning("P4Commands.GetConflict not implemented");
+            DebugLog.LogWarning("P4Commands.GetConflict not implemented");
             basePath = null;
-            mine = null;
+            yours = null;
             theirs = null;
             return false;
         }

@@ -8,16 +8,17 @@ using System.Linq;
 using System.Threading;
 using System.Xml;
 using CommandLineExecution;
+using Unity.Profiling;
 
 namespace UVC.Backend.SVN
 {
     using Logging;
-    using AssetPathFilters;
     using ComposedString = ComposedSet<string, FilesAndFoldersComposedStringDatabase>;
 
     public class SVNCommands : MarshalByRefObject, IVersionControlCommands
     {
         internal const string localEditChangeList = "Open Local";
+        internal const string localOnlyChangeList = "Local Only";
         internal const string svnTargetsFile = ".targets.tmp";
         private string workingDirectory = ".";
         private string userName;
@@ -72,7 +73,7 @@ namespace UVC.Backend.SVN
             catch (AppDomainUnloadedException) { }
             catch (Exception e)
             {
-                D.ThrowException(e);
+                DebugLog.ThrowException(e);
             }
             if (!requestRefreshLoopStop) RefreshLoop();
         }
@@ -125,28 +126,34 @@ namespace UVC.Backend.SVN
         }
 
 
+        private static ProfilerMarker refreshStatusDatabaseMarker = new ProfilerMarker("UVC.RefreshStatusDatabase");
         private void RefreshStatusDatabase()
         {
-            List<string> localCopy = null;
-            List<string> remoteCopy = null;
-
-            lock (requestQueueLockToken)
+            using (refreshStatusDatabaseMarker.Auto())
             {
-                if (localRequestQueue.Count > 0)
+                List<string> localCopy = null;
+                List<string> remoteCopy = null;
+
+                lock (requestQueueLockToken)
                 {
-                    localCopy = new List<string>(localRequestQueue.Except(remoteRequestQueue).Distinct());
-                    localRequestQueue.Clear();
+                    if (localRequestQueue.Count > 0)
+                    {
+                        localCopy = new List<string>(localRequestQueue.Except(remoteRequestQueue).Distinct());
+                        localRequestQueue.Clear();
+                    }
+
+                    if (remoteRequestQueue.Count > 0)
+                    {
+                        remoteCopy = new List<string>(remoteRequestQueue.Distinct());
+                        remoteRequestQueue.Clear();
+                    }
                 }
-                if (remoteRequestQueue.Count > 0)
-                {
-                    remoteCopy = new List<string>(remoteRequestQueue.Distinct());
-                    remoteRequestQueue.Clear();
-                }
+
+                //if (localCopy != null && localCopy.Count > 0) D.Log("Local Status : " + localCopy.Aggregate((a, b) => a + ", " + b));
+                //if (remoteCopy != null && remoteCopy.Count > 0) D.Log("Remote Status : " + remoteCopy.Aggregate((a, b) => a + ", " + b));
+                if (localCopy != null && localCopy.Count > 0) Status(localCopy, StatusLevel.Local);
+                if (remoteCopy != null && remoteCopy.Count > 0) Status(remoteCopy, StatusLevel.Remote);
             }
-            //if (localCopy != null && localCopy.Count > 0) D.Log("Local Status : " + localCopy.Aggregate((a, b) => a + ", " + b));
-            //if (remoteCopy != null && remoteCopy.Count > 0) D.Log("Remote Status : " + remoteCopy.Aggregate((a, b) => a + ", " + b));
-            if (localCopy != null && localCopy.Count > 0) Status(localCopy, StatusLevel.Local);
-            if (remoteCopy != null && remoteCopy.Count > 0) Status(remoteCopy, StatusLevel.Remote);
         }
 
         public bool IsReady()
@@ -180,6 +187,19 @@ namespace UVC.Backend.SVN
             {
                 return statusDatabase[assetPath];
             }
+        }
+
+        public InfoStatus GetInfo(string path)
+        {
+            using (var commandLineOperation = CreateSVNCommandLine($"info \"{path}\" --xml"))
+            {
+                var commandLineOutput = ExecuteOperation(commandLineOperation);
+                if (!commandLineOutput.Failed)
+                {
+                    return SVNInfoXMLParser.SVNParseInfoXML(path, commandLineOutput.OutputStr);
+                }
+            }
+            return null;
         }
 
         public IEnumerable<VersionControlStatus> GetFilteredAssets(Func<VersionControlStatus, bool> filter)
@@ -293,7 +313,7 @@ namespace UVC.Backend.SVN
             }
             catch (XmlException e)
             {
-                D.ThrowException(e);
+                DebugLog.ThrowException(e);
                 return false;
             }
             return true;
@@ -328,9 +348,8 @@ namespace UVC.Backend.SVN
             CommandLineOutput commandLineOutput;
             try
             {
-                D.Log(commandLine.ToString());
+                DebugLog.Log(commandLine.ToString());
                 currentExecutingOperation = commandLine;
-                //System.Threading.Thread.Sleep(500); // emulate latency to SVN server
                 commandLineOutput = commandLine.Execute();
             }
             catch (Exception e)
@@ -363,10 +382,6 @@ namespace UVC.Backend.SVN
                 commandLineOutput = ExecuteCommandLine(commandLine);
             }
 
-            //if (commandLineOutput.Arguments.Contains("ExceptionTest.txt"))
-            //{
-            //    throw new VCCriticalException("Test Exception cast due to ExceptionTest.txt being a part of arguments", commandLine.ToString());
-            //}
             if (!string.IsNullOrEmpty(commandLineOutput.ErrorStr))
             {
                 var errStr = commandLineOutput.ErrorStr;
@@ -374,6 +389,8 @@ namespace UVC.Backend.SVN
                     throw new VCMissingCredentialsException(errStr, commandLine.ToString());
                 else if (errStr.Contains("W160042") || errStr.Contains("Newer Version"))
                     throw new VCNewerVersionException(errStr, commandLine.ToString());
+                else if (errStr.Contains("E195020") || errStr.Contains("mixed-revision"))
+                    throw new VCMixedRevisionException(errStr, commandLine.ToString());
                 else if (errStr.Contains("W155007") || errStr.Contains("'" + workingDirectory + "'" + " is not a working copy"))
                     throw new VCCriticalException(errStr, commandLine.ToString());
                 else if (errStr.Contains("E720005") || errStr.Contains("Access is denied"))
@@ -384,20 +401,41 @@ namespace UVC.Backend.SVN
                     throw new VCLocalCopyLockedException(errStr, commandLine.ToString());
                 else if (errStr.Contains("W160035") || errStr.Contains("is already locked by user"))
                     throw new VCLockedByOther(errStr, commandLine.ToString());
-                else if (errStr.Contains("E730060") || errStr.Contains("Unable to connect") || errStr.Contains("is unreachable") || errStr.Contains("Operation timed out") || errStr.Contains("Can't connect to"))
+                else if (errStr.Contains("E730060") || errStr.Contains("Unable to connect") || errStr.Contains("is unreachable") || errStr.Contains("Operation timed out") ||
+                         errStr.Contains("Can't connect to"))
                     throw new VCConnectionTimeoutException(errStr, commandLine.ToString());
-                else if (errStr.Contains("W200017"))  // Ignore warning relating to use of propget on non-existing property in SVN 1.9+
+                else if (errStr.Contains("W200017")) // Ignore warning relating to use of propget on non-existing property in SVN 1.9+
                     commandLineOutput = new CommandLineOutput(commandLineOutput.Command, commandLineOutput.Arguments, commandLineOutput.OutputStr, "", 0);
                 else
                     throw new VCException(errStr, commandLine.ToString());
             }
+
             return commandLineOutput;
-        }                    
+
+        }
+
+        private void ThrowIfAssetpathIsInvalid(IEnumerable<string> assets)
+        {
+            foreach (var assetpath in assets)
+            {
+                for (int i = 0, length = assetpath.Length; i < length; i++)
+                {
+                    if (assetpath[i] >= '\x007F')
+                    {
+                        throw new VCInvalidAssetPath(
+                            errorMessage : $"Assetpath contained non-ASCII characters '{assetpath[i]}' in assetpath: '{assetpath}'",
+                            errorDetails : $"Bad character: {assetpath[i]}, {(int)assetpath[i]}, 0x{Convert.ToString(assetpath[i], 16)} at position {i} in assetpath: '{assetpath}'");
+                    }
+                }
+            }
+        }
 
         private bool CreateAssetOperation(string arguments, IEnumerable<string> assets)
         {
             if (assets == null || !assets.Any()) return true;
-            var filecontent = assets.Select(PrepareAssetPath).ToArray();
+            ThrowIfAssetpathIsInvalid(assets);
+
+            string[] filecontent = assets.Select(PrepareAssetPath).ToArray();
             File.WriteAllLines(svnTargetsFile, filecontent);
             bool result = CreateOperation(arguments + " --targets " + svnTargetsFile);
             File.Delete(svnTargetsFile);
@@ -455,25 +493,22 @@ namespace UVC.Backend.SVN
                         statusDatabase[assetIt] = status;
                     }
                 }
-                //D.Log("Set Pending : " + assets.Aggregate((a, b) => a + ", " + b));
             }
         }
 
         private void AddToRemoteStatusQueue(string asset)
         {
-            //D.Log("Remote Req : " + asset);
             if (!remoteRequestQueue.Contains(asset)) remoteRequestQueue.Add(asset);
         }
 
         private void AddToLocalStatusQueue(string asset)
         {
-            //D.Log("Local Req : " + asset);
             if (!localRequestQueue.Contains(asset)) localRequestQueue.Add(asset);
         }
 
         public virtual bool RequestStatus(IEnumerable<string> assets, StatusLevel statusLevel)
         {
-            if (assets == null || assets.Count() == 0) return true;
+            if (assets == null || !assets.Any()) return true;
 
             lock (requestQueueLockToken)
             {
@@ -494,7 +529,7 @@ namespace UVC.Backend.SVN
                         if (currentReflectionLevel == VCReflectionLevel.Repository) AddToRemoteStatusQueue(assetIt);
                         else if (currentReflectionLevel == VCReflectionLevel.Local) AddToLocalStatusQueue(assetIt);
                         else if (currentReflectionLevel == VCReflectionLevel.None) AddToLocalStatusQueue(assetIt);
-                        else D.LogWarning("Unhandled previous state");
+                        else DebugLog.LogWarning("Unhandled previous state");
                     }
                 }
             }
@@ -505,12 +540,26 @@ namespace UVC.Backend.SVN
         public bool Update(IEnumerable<string> assets = null)
         {
             if (assets == null || !assets.Any()) assets = new[] { workingDirectory };
-            return CreateOperation("update --force" + ConcatAssetPaths(assets)) && RequestStatus(assets, StatusLevel.Previous);
+            return CreateOperation($"update --force{ConcatAssetPaths(assets)}") && RequestStatus(assets, StatusLevel.Previous);
+        }
+
+        public bool Update(int revision, IEnumerable<string> assets = null)
+        {
+            if (assets == null || !assets.Any()) assets = new[] { workingDirectory };
+            return CreateOperation($"update -r{revision} --force{ConcatAssetPaths(assets)}") && RequestStatus(assets, StatusLevel.Previous);
         }
 
         public bool Commit(IEnumerable<string> assets, string commitMessage = "")
         {
-            return CreateAssetOperation("commit -m \"" + UnifyLineEndingsChar(ReplaceCommentChar(commitMessage)) + "\"", assets);
+            bool commitResult = CreateAssetOperation("commit -m \"" + UnifyLineEndingsChar(ReplaceCommentChar(commitMessage)) + "\"", assets);
+            vcc.ChangeListRemove(assets);
+            return commitResult;
+        }
+
+        public bool Commit(string commitMessage = "")
+        {
+            // --depth empty
+            return CreateOperation("commit -m \"" + UnifyLineEndingsChar(ReplaceCommentChar(commitMessage)) + "\"");
         }
 
         public bool Add(IEnumerable<string> assets)
@@ -520,7 +569,19 @@ namespace UVC.Backend.SVN
 
         public bool Revert(IEnumerable<string> assets)
         {
-            bool revertSuccess = CreateAssetOperation("revert --depth=infinity", assets);
+            const string workingDirectoryRoot = ".";
+            bool revertSuccess = true;
+            if (assets.Contains(workingDirectoryRoot))
+            {
+                assets = assets.Where(a => a != workingDirectoryRoot);
+                revertSuccess &= CreateAssetOperation("revert --depth empty", new[]{ workingDirectoryRoot });
+            }
+
+            if (assets.Any())
+            {
+                revertSuccess &= CreateAssetOperation("revert --depth infinity", assets);
+            }
+
             Status(assets, StatusLevel.Previous);
             bool changeListRemoveSuccess = vcc.ChangeListRemove(assets);
             bool releaseSuccess = true;
@@ -560,16 +621,79 @@ namespace UVC.Backend.SVN
             return CreateOperation("checkout \"" + url + "\" \"" + (path == "" ? workingDirectory : path) + "\"");
         }
 
+        public bool CreateBranch(string from, string to)
+        {
+            return CreateOperation("copy \"" + from + "\" \"" + to + "\" -m \"Creating new Branch from UVC\" ");
+        }
+
+        public bool MergeBranch(string url, string path = "")
+        {
+            return CreateOperation("merge \"" + url + "\" \"" + (path == "" ? workingDirectory : path) + "\"");
+        }
+
+        public bool SwitchBranch(string url, string path = "")
+        {
+            return CreateOperation("switch \"" + url + "\" \"" + (path == "" ? workingDirectory : path) + "\"");
+        }
+
+        public string GetCurrentBranch()
+        {
+            var svnInfo = CreateSVNCommandLine("info --xml ").Execute();
+            if (!svnInfo.Failed)
+            {
+                var xmlDoc = new XmlDocument();
+                xmlDoc.LoadXml(svnInfo.OutputStr);
+                return xmlDoc?.GetElementsByTagName("entry")?.Item(0)["relative-url"]?.InnerText;
+            }
+            return null;
+        }
+
+        public string GetBranchDefaultPath()
+        {
+            return "^/branches/";
+        }
+
+        public string GetTrunkPath()
+        {
+            return "^/trunk";
+        }
+
+        public List<BranchStatus> RemoteList(string path)
+        {
+            using (var commandLineOperation = CreateSVNCommandLine($"list \"{path}\" --xml"))
+            {
+                var commandLineOutput = ExecuteOperation(commandLineOperation);
+                if (!commandLineOutput.Failed)
+                {
+                    return SVNBranchXMLParser.SVNParseBranchXML(path, commandLineOutput.OutputStr);
+                }
+            }
+            return null;
+        }
+
         public bool AllowLocalEdit(IEnumerable<string> assets)
         {
             return ChangeListAdd(assets, localEditChangeList);
         }
 
+        public bool SetLocalOnly(IEnumerable<string> assets)
+        {
+            return ChangeListAdd(assets, localOnlyChangeList);
+        }
+
         public bool Resolve(IEnumerable<string> assets, ConflictResolution conflictResolution)
         {
-            if (conflictResolution == ConflictResolution.Ignore) return true;
-            string conflictparameter = conflictResolution == ConflictResolution.Theirs ? "--accept theirs-full" : "--accept mine-full";
-            return CreateAssetOperation("resolve " + conflictparameter, assets);
+            switch (conflictResolution)
+            {
+                case ConflictResolution.Mine:
+                    return CreateAssetOperation("resolve --accept mine-full", assets) &&
+                           ChangeListRemove(assets);
+                case ConflictResolution.Theirs:
+                    return CreateAssetOperation("resolve --accept theirs-full" , assets);
+                case ConflictResolution.Working:
+                    return CreateAssetOperation("resolve --accept working", assets);
+            }
+            return true;
         }
 
         public bool Move(string from, string to)
@@ -581,10 +705,10 @@ namespace UVC.Backend.SVN
 
         public bool SetIgnore(string path, IEnumerable<string> assets)
         {
-            bool result = CreateOperation(string.Format("propset svn:ignore \"{0}\" {1}", assets.Aggregate((a, b) => a + "\n" + b), path));
+            bool result = CreateOperation($"propset svn:ignore \"{assets.Aggregate((a, b) => a + "\n" + b)}\" {path}");
             if (result)
             {
-                result = CreateAssetOperation(string.Format("commit --depth empty -m \"UVC setting svn:ignore for : {0}\"", assets.Aggregate((a, b) => a + ", " + b)), new[] { path });
+                result = CreateAssetOperation($"commit --depth empty -m \"UVC setting svn:ignore for : {assets.Aggregate((a, b) => a + ", " + b)}\"", new[] { path });
             }
             ClearDatabase();
             Status(StatusLevel.Previous, DetailLevel.Normal);
@@ -594,7 +718,7 @@ namespace UVC.Backend.SVN
         public IEnumerable<string> GetIgnore(string path)
         {
             IEnumerable<string> ignores = null;
-            using (var commandLineOperation = CreateSVNCommandLine(string.Format("propget svn:ignore \"{0}\"", path)))
+            using (var commandLineOperation = CreateSVNCommandLine($"propget svn:ignore \"{path}\""))
             {
                 var commandLineOutput = ExecuteOperation(commandLineOperation);
                 if (!commandLineOutput.Failed)
@@ -610,22 +734,9 @@ namespace UVC.Backend.SVN
             return ignores;
         }
 
-        public string GetRevision()
+        public int GetRevision()
         {
-            var svnInfo = CreateSVNCommandLine("info --xml ").Execute();
-            if (!svnInfo.Failed)
-            {
-                var xmlDoc = new XmlDocument();
-                xmlDoc.LoadXml(svnInfo.OutputStr);
-                var revisionNode = xmlDoc.GetElementsByTagName("entry").Item(0);
-                if (revisionNode != null)
-                {
-                    var revision = revisionNode.Attributes["revision"];
-                    if(revision != null)
-                        return revision.InnerText;
-                }
-            }
-            return null;
+            return GetInfo(".").revision;
         }
 
         public string GetBasePath(string assetPath)
@@ -641,7 +752,7 @@ namespace UVC.Backend.SVN
             }
             else
             {
-                var svnInfo = CreateSVNCommandLine("info --xml " + assetPath).Execute();
+                var svnInfo = ExecuteOperation(CreateSVNCommandLine("info --xml \"" + assetPath + "\""));
                 if (!svnInfo.Failed)
                 {
                     var xmlDoc = new XmlDocument();
@@ -662,25 +773,15 @@ namespace UVC.Backend.SVN
             return "";
         }
 
-        public bool GetConflict(string assetPath, out string basePath, out string mine, out string theirs)
+        public bool GetConflict(string assetPath, out string basepath, out string yours, out string theirs)
         {
-            string[] conflictingFiles = Directory.GetFiles(Path.GetDirectoryName(assetPath).Replace("\\","/"), Path.GetFileName(assetPath) + ".r*").Where(a => Path.GetExtension(a).StartsWith(".r")).ToArray();
-            string minePath = assetPath + ".mine";
-
-            D.Log(string.Format("mine:{0}, theirs:{1}, base:{2}, length:{3}", minePath, conflictingFiles[1], conflictingFiles[0], conflictingFiles.Length));
-
-            if (conflictingFiles.Length == 2 && File.Exists(minePath) && File.Exists(conflictingFiles[0]) && File.Exists(conflictingFiles[1]))
-            {
-                basePath = conflictingFiles[0];
-                mine = minePath;
-                theirs = conflictingFiles[1];
-                return true;
-            }
-
-            basePath = null;
-            mine = null;
-            theirs = null;
-            return false;
+            var path  = Path.GetDirectoryName(assetPath);
+            var file  = Path.GetFileName(assetPath);
+            var files = Directory.GetFiles(path, $"{file}.*").Where(p => !p.EndsWith(".meta")).ToArray();
+            yours    = files[1];
+            basepath = files[2];
+            theirs   = files[3];
+            return true;
         }
 
         public bool HasValidLocalCopy()
@@ -693,7 +794,7 @@ namespace UVC.Backend.SVN
             }
             if (!string.IsNullOrEmpty(error))
             {
-                D.LogWarning(error);
+                DebugLog.LogWarning(error);
                 return false;
             }
             return true;
@@ -714,7 +815,7 @@ namespace UVC.Backend.SVN
 
         public void RemoveFromDatabase(IEnumerable<string> assets)
         {
-            D.Log("Remove from DB: "+ assets.Aggregate((a,b) => a + ", " + b));
+            //DebugLog.Log("Remove from DB: "+ assets.Aggregate((a,b) => a + ", " + b));
             lock (statusDatabaseLockToken)
             {
                 foreach (var assetIt in assets)

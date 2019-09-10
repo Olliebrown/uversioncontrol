@@ -6,7 +6,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
-using UVC.Logging;
+using UnityEngine.Networking;
 
 namespace UVC
 {
@@ -90,7 +90,7 @@ namespace UVC
             if (!VCSettings.Analytics || !HasInternet()) return;
 
             string requestURL = GenerateRequestURL(page, pageTitle, category, action, label, value);
-            D.Assert(!requestURL.Contains(archivedURLSeperator), () => "URL contains the 'archivedURLSeperator'");
+            DebugLog.Assert(!requestURL.Contains(archivedURLSeperator), () => "URL contains the 'archivedURLSeperator'");
             requestQueue.Enqueue(requestURL);
             ProcessRequestQueue();
         }
@@ -104,29 +104,29 @@ namespace UVC
             var userHash = PlayerPrefs.GetString(userHashPrefKey);
             if (userHash.Length == 0)
             {
-                userHash = string.Format("{0}.{1}.{2}.{3}.{4}.", domainHash, randomInt, timestamp, timestamp, timestamp);
+                userHash = $"{domainHash}.{randomInt}.{timestamp}.{timestamp}.{timestamp}.";
                 PlayerPrefs.SetString(userHashPrefKey, userHash);
             }
 
             var _utma = userHash + visitCount.ToString();
-            var _utmz = string.Format("{0}.{1}.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none)", domainHash, timestamp);
-            var _utmcc = WWW.EscapeURL(string.Format("__utma={0};+__utmz={1};", _utma, _utmz)).Replace("|", "%7C");
+            var _utmz = $"{domainHash}.{timestamp}.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none)";
+            var _utmcc = UnityWebRequest.EscapeURL($"__utma={_utma};+__utmz={_utmz};").Replace("|", "%7C");
 
             var parameters = new Dictionary<string, string>()
             {
                 { "utmwv", "4.8.8" }, // Analytics version
                 { "utmn", randomInt.ToString() }, // Random number
-                { "utmhn", WWW.EscapeURL( domain ) }, // Host name
+                { "utmhn", UnityWebRequest.EscapeURL( domain ) }, // Host name
                 { "utmcs", "UTF-8" }, // Charset
-                { "utmsr", string.Format( "{0}x{1}", Screen.currentResolution.width, Screen.currentResolution.height ) }, // Screen resolution
+                { "utmsr", $"{Screen.currentResolution.width}x{Screen.currentResolution.height}"}, // Screen resolution
                 { "utmsc", "24-bit" }, // Color depth
                 { "utmul", "en-us" }, // Language
                 { "utmje", "0" }, // Java enabled or not
                 { "utmfl", "-" }, // User Flash version
-                { "utmdt", WWW.EscapeURL( pageTitle ) }, // Page title
+                { "utmdt", UnityWebRequest.EscapeURL( pageTitle ) }, // Page title
                 { "utmhid", randomInt.ToString() }, // Random number (unique for all session requests)
                 { "utmr", "-" }, // Referrer
-                { "utmp", WWW.EscapeURL( page ) }, // Page URL
+                { "utmp", UnityWebRequest.EscapeURL( page ) }, // Page URL
                 { "utmac", trackingCode }, // Google Analytics account
                 { "utmcc", _utmcc } // Cookie string (encoded)
             };
@@ -135,14 +135,9 @@ namespace UVC
             if (Valid(category) && Valid(action))
             {
                 var eventString =
-                    string.Format("5({0}*{1}{2}){3}",
-                        category,
-                        action,
-                        Valid(label) ? string.Format("*{0}", label) : "",
-                        value.HasValue ? string.Format("({0})", value.ToString()) : ""
-                    );
+                    $"5({category}*{action}{(Valid(label) ? $"*{label}" : "")}){(value.HasValue ? $"({value.ToString()})" : "")}";
 
-                parameters.Add("utme", WWW.EscapeURL(eventString));
+                parameters.Add("utme", UnityWebRequest.EscapeURL(eventString));
                 parameters.Add("utmt", "event");
             }
 
@@ -164,20 +159,21 @@ namespace UVC
             {
                 var url = requestQueue.Dequeue();
                 //D.Log("GoogleAnalytics : start request : " + url);
-                WWW www = new WWW(url);
+                var form = new WWWForm();
+                var request = UnityWebRequest.Post(url, form);
+                var asyncOperation = request.SendWebRequest();
                 float timeoutCompletion = Time.realtimeSinceStartup + submitTimeout;
-                ContinueWith.When(() => Time.realtimeSinceStartup > timeoutCompletion || www.isDone, () => ProcessRequestResult(www));
+                ContinueWith.When(() => Time.realtimeSinceStartup > timeoutCompletion || asyncOperation.isDone, () => ProcessRequestResult(asyncOperation.webRequest));
             }
             queueIsProcessing = false;
         }
-
-        private static void ProcessRequestResult(WWW www)
+        private static void ProcessRequestResult(UnityWebRequest request)
         {
             //D.Assert(www.isDone, () => "Assuming the www has finished when the result is to be processed");
-            if (www.isDone && www.error != null)
+            if (request.error != null)
             {
                 //D.LogError("GoogleAnalytics :" + www.error + "\nwhen trying to process\n" + www.url);
-                requestQueue.Enqueue(www.url);
+                requestQueue.Enqueue(request.url);
             }
             else
             {

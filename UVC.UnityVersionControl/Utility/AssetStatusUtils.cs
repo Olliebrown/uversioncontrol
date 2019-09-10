@@ -1,7 +1,8 @@
 // Copyright (c) <2018>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
-using System;
+
+using System.Collections.Generic;
 using UnityEngine;
 #pragma warning disable 414
 
@@ -26,6 +27,7 @@ namespace UVC.UserInterface
         private static readonly Color lockedOtherColor = new Color(0.9f, 0.3f, 0.3f);
         private static readonly Color modifiedColor = pastelBlue;
         private static readonly Color modifiedNoLockColor = orange;
+        private static readonly Color modifiedPropertyColor = new Color(0.29f, 1f, 0.94f);
         private static readonly Color localEditColor = new Color(1.0f, 1.0f, 0.2f);
         private static readonly Color unversionedColor = new Color(0.4f, 0.4f, 0.3f);
         private static readonly Color remoteModifiedColor = new Color(1.0f, 0.9f, 0.9f, 0.4f);
@@ -39,6 +41,7 @@ namespace UVC.UserInterface
             if (assetStatus.fileStatus == VCFileStatus.Conflicted) return conflictedColor;
             if (assetStatus.fileStatus == VCFileStatus.Missing) return missingColor;
             if (assetStatus.fileStatus == VCFileStatus.Ignored) return ignoreColor;
+            if (assetStatus.localOnly) return orange;
             if (assetStatus.LocalEditAllowed()) return localEditColor;
             if (assetStatus.ModifiedWithoutLock()) return modifiedNoLockColor;
             if (assetStatus.fileStatus == VCFileStatus.Deleted) return deletedColor;
@@ -51,6 +54,7 @@ namespace UVC.UserInterface
             }
 
             if (assetStatus.fileStatus == VCFileStatus.Modified) return modifiedColor;
+            if (assetStatus.property == VCProperty.Modified) return modifiedPropertyColor;
             if (assetStatus.reflectionLevel == VCReflectionLevel.Pending) return pendingColor;
             if (assetStatus.fileStatus == VCFileStatus.Unversioned) return unversionedColor;
             if (assetStatus.remoteStatus == VCRemoteFileStatus.Modified) return remoteModifiedColor;
@@ -65,12 +69,14 @@ namespace UVC.UserInterface
             if (assetStatus.fileStatus == VCFileStatus.Conflicted) return "Conflicted";
             if (assetStatus.fileStatus == VCFileStatus.Deleted) return "Deleted";
             if (assetStatus.lockStatus == VCLockStatus.LockedHere) return Terminology.getlock + (assetStatus.fileStatus == VCFileStatus.Modified?"*":"");
+            if (assetStatus.localOnly) return "Local Only!";
             if (assetStatus.LocalEditAllowed()) return Terminology.allowLocalEdit + (assetStatus.fileStatus == VCFileStatus.Modified ? "*" : "");
-            if (assetStatus.ModifiedWithoutLock()) return "Modified!";            
+            if (assetStatus.ModifiedWithoutLock()) return "Modified!";
             if (assetStatus.lockStatus == VCLockStatus.LockedOther) return Terminology.lockedBy + "'" + assetStatus.owner + "'";
             if (assetStatus.fileStatus == VCFileStatus.Modified) return "Modified";
             if (assetStatus.fileStatus == VCFileStatus.Unversioned) return Terminology.unversioned;
             if (assetStatus.fileStatus == VCFileStatus.Added) return "Added";
+            if (assetStatus.property == VCProperty.Modified) return "[Merge Info]";
             if (assetStatus.fileStatus == VCFileStatus.Replaced) return "Replaced";
             if (assetStatus.fileStatus == VCFileStatus.Ignored) return "Ignored";
             if (assetStatus.remoteStatus == VCRemoteFileStatus.Modified) return "Modified on server";
@@ -100,6 +106,30 @@ namespace UVC.UserInterface
             }
             if (assetStatus.fileStatus == VCFileStatus.Modified) lockMessage += "*";
             return lockMessage;
+        }
+
+        public static VersionControlStatus GetDominantStatus(IReadOnlyList<VersionControlStatus> statuses)
+        {
+            VersionControlStatus dominantStatus = new VersionControlStatus();
+            foreach (var status in statuses)
+            {
+                if (status.lockStatus > dominantStatus.lockStatus)
+                {
+                    dominantStatus = status;
+                    continue;
+                }
+                if (status.fileStatus > dominantStatus.fileStatus)
+                {
+                    dominantStatus = status;
+                    continue;
+                }
+                if (status.allowLocalEdit && !dominantStatus.allowLocalEdit)
+                {
+                    dominantStatus = status;
+                    continue;
+                }
+            }
+            return dominantStatus;
         }
     }
 }

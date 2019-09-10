@@ -1,4 +1,4 @@
-﻿// Copyright (c) <2018>
+// Copyright (c) <2018>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System;
@@ -6,7 +6,6 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
-using UVC.Logging;
 using MultiColumnState = MultiColumnState<UVC.VersionControlStatus, UnityEngine.GUIContent>;
 using MultiColumnViewOption = MultiColumnView.MultiColumnViewOption<UVC.VersionControlStatus>;
 
@@ -94,9 +93,9 @@ namespace UVC.UserInterface
                 return String.CompareOrdinal(r1Text, r2Text);
             };
 
-            Func<GenericMenu> rowRightClickMenu = () =>
+            Func<MultiColumnState.Row, MultiColumnState.Column, GenericMenu> rowRightClickMenu = (row, column) =>
             {
-                var selected = multiColumnState.GetSelected().Select(status => status.assetPath.Compose());
+                var selected = multiColumnState.GetSelected().Select(status => status.assetPath.Compose()).ToList();
                 if (!selected.Any()) return new GenericMenu();
                 GenericMenu menu = new GenericMenu();
                 if (selected.Count() == 1) VCGUIControls.CreateVCContextMenu(ref menu, selected.First());
@@ -110,8 +109,10 @@ namespace UVC.UserInterface
                 });
                 menu.AddItem(new GUIContent("Show on Harddisk"), false, () =>
                 {
-                    Selection.objects = selectedObjs;
-                    EditorApplication.ExecuteMenuItem((Application.platform == RuntimePlatform.OSXEditor ? "Assets/Reveal in Finder" : "Assets/Show in Explorer"));
+                    foreach (string item in selected)
+                    {
+                        EditorUtility.RevealInFinder(item);
+                    }
                 });
                 return menu;
             };
@@ -164,10 +165,39 @@ namespace UVC.UserInterface
                 widths = new float[] { 200 },
                 doubleClickAction = status =>
                 {
-                    if (VCUtility.IsDiffableAsset(status.assetPath) && VCUtility.ManagedByRepository(status) && status.fileStatus == VCFileStatus.Modified)
-                        VCUtility.DiffWithBase(status.assetPath.Compose());
+                    if (MergeHandler.IsDiffableAsset(status.assetPath) && VCUtility.ManagedByRepository(status) && status.fileStatus == VCFileStatus.Conflicted)
+                    {
+                        var assetPath = status.assetPath.Compose();
+                        VCCommands.Instance.GetConflict(assetPath, out var basePath, out var yours, out var theirs);
+                        MergeHandler.ResolveConflict(assetPath, basePath, theirs, yours);
+                    }
+                    else if (MergeHandler.IsDiffableAsset(status.assetPath) && VCUtility.ManagedByRepository(status) && status.fileStatus == VCFileStatus.Modified)
+                        MergeHandler.DiffWithBase(status.assetPath.Compose());
                     else
-                        AssetDatabase.OpenAsset(AssetDatabase.LoadMainAssetAtPath(status.assetPath.Compose()));
+                    {
+                        string path = status.assetPath.Compose();
+                        var obj = AssetDatabase.LoadMainAssetAtPath(path);
+
+                        if (path.StartsWith("Assets"))
+                        {
+                            if (AssetDatabase.IsValidFolder(path) || obj == null)
+                            {
+                                EditorUtility.RevealInFinder(path);
+                            }
+                            else
+                            {
+                                bool result = AssetDatabase.OpenAsset(obj);
+                                if (!result)
+                                {
+                                    EditorUtility.RevealInFinder(path);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            EditorUtility.RevealInFinder(path);
+                        }
+                    }
                 }
             };
 
@@ -228,8 +258,11 @@ namespace UVC.UserInterface
 
         private static string GetFileType(string assetPath)
         {
+            if (AssetDatabase.IsValidFolder(assetPath))
+                return "[folder]";
             int indexOfLastDot = assetPath.LastIndexOf(".", StringComparison.Ordinal);
-            return (indexOfLastDot > 0) ? assetPath.Substring(assetPath.LastIndexOf(".", StringComparison.Ordinal) + 1) : (System.IO.Directory.Exists(assetPath) ? "[folder]" : "[unknown]");
+            int indexOfLastSlah = assetPath.LastIndexOf("/", StringComparison.Ordinal);
+            return (indexOfLastDot > 0 && indexOfLastDot > indexOfLastSlah) ? assetPath.Substring(assetPath.LastIndexOf(".", StringComparison.Ordinal) + 1) : "[folder]";
         }
 
         public void RefreshGUIFilter()

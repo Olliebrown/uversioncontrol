@@ -12,6 +12,7 @@ namespace UVC
     {
         Mine,
         Theirs,
+        Working,
         Ignore
     }
     public enum StatusLevel
@@ -33,7 +34,7 @@ namespace UVC
 
     /// <summary>
     /// IVersionControlCommands is the centerpoint for the Version Control. This interface represents all actions that
-    /// can be performed on the underlying version control system. 
+    /// can be performed on the underlying version control system.
     /// * All version control backends implement this interface.
     /// * All VCCDecorator's decorates this interface
     /// </summary>
@@ -49,12 +50,15 @@ namespace UVC
         bool SetUserCredentials(string userName, string password, bool cacheCredentials);
         VersionControlStatus GetAssetStatus(string assetPath);
         VersionControlStatus GetAssetStatus(ComposedString assetPath);
+        InfoStatus GetInfo(string path);
         IEnumerable<VersionControlStatus> GetFilteredAssets(Func<VersionControlStatus, bool> filter);
         bool RequestStatus(IEnumerable<string> assets, StatusLevel statusLevel);
         bool Status(StatusLevel statusLevel, DetailLevel detailLevel);
         bool Status(IEnumerable<string> assets, StatusLevel statusLevel);
         bool Update(IEnumerable<string> assets = null);
+        bool Update(int revision, IEnumerable<string> assets = null);
         bool Commit(IEnumerable<string> assets, string commitMessage = "");
+        bool Commit(string commitMessage = "");
         bool Add(IEnumerable<string> assets);
         bool Revert(IEnumerable<string> assets);
         bool Delete(IEnumerable<string> assets, OperationMode mode);
@@ -64,13 +68,21 @@ namespace UVC
         bool ChangeListRemove(IEnumerable<string> assets);
         bool Resolve(IEnumerable<string> assets, ConflictResolution conflictResolution);
         bool Checkout(string url, string path = "");
+        bool CreateBranch(string from, string to);
+        bool MergeBranch(string url, string path = "");
+        bool SwitchBranch(string url, string path = "");
+        string GetCurrentBranch();
+        string GetBranchDefaultPath();
+        string GetTrunkPath();
+        List<BranchStatus> RemoteList(string path);
         bool AllowLocalEdit(IEnumerable<string> assets);
+        bool SetLocalOnly(IEnumerable<string> assets);
         bool Move(string from, string to);
         bool SetIgnore(string path, IEnumerable<string> assets);
         IEnumerable<string> GetIgnore(string path);
-        string GetRevision();
+        int GetRevision();
         string GetBasePath(string assetPath);
-        bool GetConflict(string assetPath, out string basePath, out string mine, out string theirs);
+        bool GetConflict(string assetPath, out string basePath, out string yours, out string theirs);
         bool CleanUp();
         void ClearDatabase();
         void RemoveFromDatabase(IEnumerable<string> assets);

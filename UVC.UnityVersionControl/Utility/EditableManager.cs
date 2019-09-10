@@ -1,4 +1,4 @@
-﻿// Copyright (c) <2018>
+// Copyright (c) <2018>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 
@@ -46,11 +46,6 @@ namespace UVC
             return string.IsNullOrEmpty(assetPath) || assetPath.EndsWith("unity_builtin_extra");
         }
 
-        public static bool LockPrefab(string assetPath)
-        {
-            return VCSettings.LockPrefabs && assetPath.ToLowerInvariant().Contains(VCSettings.LockPrefabsFilter.ToLowerInvariant());
-        }
-
         public static bool LockScene(string assetPath)
         {
             return VCSettings.LockScenes && assetPath.ToLowerInvariant().Contains(VCSettings.LockScenesFilter.ToLowerInvariant());
@@ -61,16 +56,10 @@ namespace UVC
             if (!EditorUtility.IsPersistent(gameObject))
             {
                 bool editable = ShouleBeEditable(gameObject);
-                bool parentEditable = gameObject.transform.parent ? ShouleBeEditable(gameObject.transform.parent.gameObject) : VCUtility.HaveAssetControl(SceneManagerUtilities.GetCurrentScenePath());
-                bool prefabHeadEditable = PrefabHelper.IsPrefabRoot(gameObject) && parentEditable;
-
-                if (prefabHeadEditable) SetEditable(gameObject, true);
-                else SetEditable(gameObject, editable);
-
+                SetEditable(gameObject, editable);
                 foreach (var componentIt in gameObject.GetComponents<Component>())
                 {
-                    if (prefabHeadEditable && componentIt == gameObject.transform) SetEditable(gameObject.transform, true);
-                    else RefreshEditableComponent(gameObject, componentIt);
+                    RefreshEditableComponent(gameObject, componentIt);
                 }
             }
         }
@@ -82,7 +71,7 @@ namespace UVC
             var assetStatus = gameObject.GetAssetStatus();
             if (!VCUtility.ManagedByRepository(assetStatus)) return true;
             bool isPrefab = ObjectUtilities.ChangesStoredInPrefab(gameObject);
-            if (isPrefab && LockPrefab(assetPath))
+            if (isPrefab)
             {
                 return VCUtility.HaveAssetControl(assetStatus);
             }

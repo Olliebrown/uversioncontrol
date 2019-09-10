@@ -2,9 +2,7 @@
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System.Collections.Generic;
-using System.Text;
-using System.Linq;
-using UnityEngine;
+using Unity.Profiling;
 
 namespace UVC
 {
@@ -58,6 +56,13 @@ namespace UVC
 
     public class ComposedSet<T, TDB> where TDB : IComposedSetDatabase<T>, new()
     {
+        #region Profiler Markers
+        private static readonly ProfilerMarker composeMarker   = new ProfilerMarker("Compose");
+        private static readonly ProfilerMarker decomposeMarker = new ProfilerMarker("Decompose");
+        private static readonly ProfilerMarker equalsMarker    = new ProfilerMarker("Equals");
+        private static readonly ProfilerMarker hashcodeMarker  = new ProfilerMarker("HashCode");
+        #endregion
+        
         // Const or Static
         protected static TDB database = new TDB();
         public static readonly ComposedSet<T, TDB> empty = new ComposedSet<T, TDB>(new List<int>());
@@ -80,7 +85,10 @@ namespace UVC
         }
         public ComposedSet(T composed)
         {
-            indices = database.Decompose(composed);
+            using (decomposeMarker.Auto())
+            {
+                indices = database.Decompose(composed);
+            }
             hashCode = CalculateHashCode(indices);
         }
 
@@ -90,16 +98,16 @@ namespace UVC
         }
         public static ComposedSet<T, TDB> operator +(ComposedSet<T, TDB> a, ComposedSet<T, TDB> b)
         {
-            var newIndicies = new List<int>(a.indices);
-            newIndicies.AddRange(b.indices);
-            return new ComposedSet<T, TDB>(newIndicies);
+            var newIndices = new List<int>(a.indices);
+            newIndices.AddRange(b.indices);
+            return new ComposedSet<T, TDB>(newIndices);
         }
         public static ComposedSet<T, TDB> operator +(ComposedSet<T, TDB> a, T b)
         {
-            var newIndicies = new List<int>(a.indices);
+            var newIndices = new List<int>(a.indices);
             var bComposedSet = new ComposedSet<T, TDB>(b);
-            newIndicies.AddRange(bComposedSet.indices);
-            return new ComposedSet<T, TDB>(newIndicies);
+            newIndices.AddRange(bComposedSet.indices);
+            return new ComposedSet<T, TDB>(newIndices);
         }
         public static bool operator ==(ComposedSet<T, TDB> a, ComposedSet<T, TDB> b)
         {
@@ -117,14 +125,20 @@ namespace UVC
         }
         private static int CalculateHashCode(List<int> indices)
         {
-            int hash = 13;
-            for (int i = 0, length = indices.Count; i < length; ++i)
-                hash = (hash * 7) + indices[i];
-            return hash;
+            using (hashcodeMarker.Auto())
+            {
+                int hash = 13;
+                for (int i = 0, length = indices.Count; i < length; ++i)
+                    hash = (hash * 7) + indices[i];
+                return hash;
+            }
         }
         public T Compose()
         {
-            return database.Compose(indices);
+            using (composeMarker.Auto())
+            {
+                return database.Compose(indices);
+            }
         }
         public List<int> GetIndicesCopy()
         {
@@ -132,15 +146,19 @@ namespace UVC
         }
         public override bool Equals(object obj)
         {
-            if (obj == null) return false;
-            var other = obj as ComposedSet<T, TDB>;
-            if ((object)other == null) return false;
-            if (other.hashCode != hashCode) return false;
-            
-            for (int i = 0, length = indices.Count; i < length; ++i)
-                if (other.indices[i] != indices[i]) return false;
-            
-            return true;
+            using (equalsMarker.Auto())
+            {
+                if (obj == null) return false;
+                var other = obj as ComposedSet<T, TDB>;
+                if ((object) other == null) return false;
+                if (other.hashCode != hashCode) return false;
+
+                for (int i = 0, length = indices.Count; i < length; ++i)
+                    if (other.indices[i] != indices[i])
+                        return false;
+
+                return true;
+            }
         }
 
         public override string ToString()
@@ -184,15 +202,21 @@ namespace UVC
             return EndsWith(cset) ? GetSubset(0, indices.Count - cset.indices.Count) : this;
         }
 
+        public bool Contains(ComposedSet<T, TDB> a)
+        {
+            return FindFirstIndex(a) != -1;
+        }
+
         public int FindFirstIndex(ComposedSet<T, TDB> a)
         {
             int length = indices.Count;
             var aindices = a.indices;
             int alength = aindices.Count;
+            if (length == 0) return -1;
             if (alength > length) return -1;
             if (alength == 0) return -1;
             
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < length - (alength - 1); i++)
             {
                 if (indices[i] == aindices[0]) // First index match, now test the rest
                 {
@@ -213,10 +237,11 @@ namespace UVC
             int length = indices.Count;
             var aindices = a.indices;
             int alength = aindices.Count;
+            if (length == 0) return -1;
             if (alength > length) return -1;
             if (alength == 0) return -1;
             
-            for (int i = length - 1; i > 0; i--) // look from end to start
+            for (int i = length - 1; i >= 0; i--) // look from end to start
             {
                 if (indices[i] == aindices[0] && i + alength <= length) // First index match, now test the rest
                 {

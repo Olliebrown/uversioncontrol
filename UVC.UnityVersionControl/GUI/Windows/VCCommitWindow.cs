@@ -15,7 +15,7 @@ namespace UVC.UserInterface
     {
         // Const
         const float minimumControlHeight = 50;
-        const int maxProgressSize = 65536;
+        const int maxProgressSize = 10000;
 
         // State
         public IEnumerable<string> commitedFiles = new List<string>();
@@ -48,7 +48,7 @@ namespace UVC.UserInterface
 
         public void SetAssetPaths(IEnumerable<string> assets, IEnumerable<string> dependencies)
         {
-            D.Log("VCCommitWindow:SetAssetPaths");
+            DebugLog.Log("VCCommitWindow:SetAssetPaths");
             ProfilerUtilities.BeginSample("CommitWindow::SetAssetPaths");
             assetPaths = assets.Select(s => new ComposedString(s)).ToList();
             depedencyAssetPaths = dependencies.Select(s => new ComposedString(s)).ToList();
@@ -62,11 +62,12 @@ namespace UVC.UserInterface
             using (PushStateUtility.Profiler("CommitWindow::BaseFilter"))
             {
                 var metaStatus = vcStatus.MetaStatus();
-                bool interresting = (vcStatus.fileStatus != VCFileStatus.None &&
+                bool interesting = (vcStatus.fileStatus != VCFileStatus.None &&
                                     (vcStatus.fileStatus != VCFileStatus.Normal || (metaStatus != null && metaStatus.fileStatus != VCFileStatus.Normal))) ||
-                                    vcStatus.lockStatus == VCLockStatus.LockedHere;
+                                    vcStatus.lockStatus == VCLockStatus.LockedHere ||
+                                    vcStatus.property == VCProperty.Modified;
 
-                if (!interresting) return false;
+                if (!interesting) return false;
                 ComposedString key = vcStatus.assetPath.TrimEnd(VCCAddMetaFiles.meta);
                 return (assetPaths.Contains(key) || depedencyAssetPaths.Contains(key));
             }
@@ -87,6 +88,7 @@ namespace UVC.UserInterface
 
         private void OnEnable()
         {
+            AssetDatabaseRefreshManager.PauseAssetDatabaseRefresh();
             minSize  = new Vector2(1000, 400);
             position = new Rect {
                 xMin    = Screen.width * 0.5f - this.minSize.x,
@@ -104,6 +106,7 @@ namespace UVC.UserInterface
         {
             EditorPrefs.SetFloat("VCCommitWindow/commitMessageHeight", commitMessageHeight);
             vcMultiColumnAssetList.Dispose();
+            AssetDatabaseRefreshManager.ResumeAssetDatabaseRefresh();
         }
 
         private void OnGUI()
@@ -170,7 +173,7 @@ namespace UVC.UserInterface
                 {
                     var selection = VCSettings.SelectiveCommit ? vcMultiColumnAssetList.GetMasterSelection() : vcMultiColumnAssetList.GetSelection();
                     if (selection.Count() != 0)
-                    {                        
+                    {
                         var selectedAssets = selection.Select(status => status.assetPath).Select(cstr => cstr.Compose()).ToList();
                         VCCommands.Instance.ProgressInformation += s =>
                         {

@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
-using UnityEngine;
 using UVC.UserInterface;
 
 namespace UVC
@@ -58,11 +57,11 @@ namespace UVC
             bool acceptOperation = true;
             if (assetStatus.lockStatus == VCLockStatus.LockedOther)
             {
-                acceptOperation = EditorUtility.DisplayDialog(command + " on repository?", assetPath + "\nis " + Terminology.getlock + " by [" + assetStatus.owner + "], are you sure you want to " + command + "?", command, "Cancel");
+                acceptOperation = UserDialog.DisplayDialog(command + " on repository?", assetPath + "\nis " + Terminology.getlock + " by [" + assetStatus.owner + "], are you sure you want to " + command + "?", command, "Cancel");
             }
             if (acceptOperation && assetStatus.fileStatus == VCFileStatus.Modified)
             {
-                acceptOperation = EditorUtility.DisplayDialog(command + " on repository?", assetPath + "\nFile is modified on repository, are you sure you want to " + command + "?", command, "Cancel");
+                acceptOperation = UserDialog.DisplayDialog(command + " on repository?", assetPath + "\nFile is modified on repository, are you sure you want to " + command + "?", command, "Cancel");
             }
             return acceptOperation;
         }
@@ -79,7 +78,7 @@ namespace UVC
                     string topUnversionedFolder;
                     if (InUnversionedParentFolder(to, out topUnversionedFolder))
                     {
-                        int result = EditorUtility.DisplayDialogComplex("Add Folder?", "Versioned files are moved into an unversioned folder. Add following unversioned folder first?\n\n" + topUnversionedFolder, "Yes", "No", "Cancel");
+                        int result = UserDialog.DisplayDialogComplex("Add Folder?", "Versioned files are moved into an unversioned folder. Add following unversioned folder first?\n\n" + topUnversionedFolder, "Yes", "No", "Cancel");
                         if (result == 0)
                         {
                             VCCommands.Instance.Add(new[] { topUnversionedFolder });
@@ -93,7 +92,7 @@ namespace UVC
                     }
                     if (VCCommands.Instance.Move(from, to))
                     {
-                        D.Log("Version Control Move: " + from + " => " + to);
+                        DebugLog.Log("Version Control Move: " + from + " => " + to);
                         return AssetMoveResult.DidMove;
                     }
                     return AssetMoveResult.DidNotMove;
@@ -135,7 +134,7 @@ namespace UVC
                 foreach (var asset in noControl)
                 {
                     string message = string.Format("Unity is trying to save following file which is not under control on {1}.\n\n'{0}'", asset, VCSettings.VersionControlBackend, Terminology.getlock);
-                    int result = EditorUtility.DisplayDialogComplex("Save File?", message, Terminology.allowLocalEdit, Terminology.getlock, "Do not save");
+                    int result = UserDialog.DisplayDialogComplex("Save File?", message, Terminology.allowLocalEdit, Terminology.getlock, "Do not save");
                     if (result == 0 || result == 1)
                     {
                         toBeSaved.Add(asset);
@@ -155,7 +154,7 @@ namespace UVC
             if (VCCommands.Active && VCSettings.LockAssets)
             {
                 var ap = new ComposedString(assetPath).TrimEnd(VCCAddMetaFiles.meta);
-                if (!VCUtility.IsMergableAsset(ap) && ap.StartsWith("Assets/"))
+                if (!MergeHandler.IsMergableAsset(ap) && ap.StartsWith("Assets/"))
                 {
                     var status = VCCommands.Instance.GetAssetStatus(ap);
                     message = AssetStatusUtils.GetStatusText(status);

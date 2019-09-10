@@ -58,7 +58,8 @@ namespace UVC
 
         public override bool GetLock(IEnumerable<string> assets, OperationMode mode)
         {
-            return base.GetLock(AddMeta(assets), mode);
+            assets = assets.ToArray();
+            return base.GetLock(assets, mode) && base.GetLock(GetMeta(assets), mode);
         }
 
         public override bool ReleaseLock(IEnumerable<string> assets)
@@ -81,6 +82,16 @@ namespace UVC
             return RemoveMetaPostFix(base.GetFilteredAssets(filter));
         }
 
+        public override bool ChangeListAdd(IEnumerable<string> assets, string name)
+        {
+            return base.ChangeListAdd(AddMeta(assets), name);
+        }
+
+        public override bool ChangeListRemove(IEnumerable<string> assets)
+        {
+            return base.ChangeListRemove(AddMeta(assets));
+        }
+
         public override void RemoveFromDatabase(IEnumerable<string> assets)
         {
             base.RemoveFromDatabase(AddMeta(assets));
@@ -91,6 +102,25 @@ namespace UVC
             return base.AllowLocalEdit(AddMeta(assets));
         }
 
+        public override bool SetLocalOnly(IEnumerable<string> assets)
+        {
+            return base.SetLocalOnly(AddMeta(assets));
+        }
+
+        private static IEnumerable<string> GetMeta(IEnumerable<string> assets)
+        {
+            bool nul = assets == null;
+            bool empty = assets.Count() == 0;
+
+            if (assets == null || !assets.Any()) return new string[]{};
+            return assets
+                .Where(ap => !ap.EndsWith(metaStr) && (ap.StartsWith(assetsFolder) || (ap.StartsWith(packageFolder) && !ap.EndsWith(manifest))))
+                .Select(ap => ap + metaStr)
+                .Distinct()
+                .OrderByDescending(s => s.Length)
+                .ToArray();
+        }
+
         private static IEnumerable<string> AddMeta(IEnumerable<string> assets)
         {
             if (assets == null || !assets.Any()) return assets;
@@ -99,7 +129,7 @@ namespace UVC
                 .Select(ap => ap + metaStr)
                 .Concat(assets)
                 .Distinct()
-                .OrderBy(s => s.Length)
+                .OrderByDescending(s => s.Length)
                 .ToArray();
         }
 

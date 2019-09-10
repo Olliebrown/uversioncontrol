@@ -11,7 +11,7 @@ namespace UVC
     {
         public string ErrorMessage { get { return base.Message; } }
         public string ErrorDetails { get; private set; }
-        public VCException(string errorMessage, string errorDetails) : base(errorMessage) { ErrorDetails = errorDetails + "\n\n" + D.GetCallstack(); }
+        public VCException(string errorMessage, string errorDetails) : base(errorMessage) { ErrorDetails = errorDetails + "\n\n" + DebugLog.GetCallstack(); }
         public VCException(string errorMessage, string errorDetails, Exception innerEx) : base(errorMessage, innerEx) { ErrorDetails = innerEx.Message + "\n\n" + innerEx.StackTrace; }
     }
 
@@ -49,6 +49,12 @@ namespace UVC
         public VCNewerVersionException(string errorMessage, string errorDetails, Exception innerEx) : base(errorMessage, errorDetails, innerEx) { }
     }
 
+    public class VCMixedRevisionException : VCException
+    {
+        public VCMixedRevisionException(string errorMessage, string errorDetails) : base(errorMessage, errorDetails) { }
+        public VCMixedRevisionException(string errorMessage, string errorDetails, Exception innerEx) : base(errorMessage, errorDetails, innerEx) { }
+    }
+
     public class VCOutOfDate : VCException
     {
         public VCOutOfDate(string errorMessage, string errorDetails) : base(errorMessage, errorDetails) { }
@@ -65,5 +71,11 @@ namespace UVC
     {
         public VCLockedByOther(string errorMessage, string errorDetails) : base(errorMessage, errorDetails) { }
         public VCLockedByOther(string errorMessage, string errorDetails, Exception innerEx) : base(errorMessage, errorDetails, innerEx) { }
+    }
+    
+    public class VCInvalidAssetPath : VCException
+    {
+        public VCInvalidAssetPath(string errorMessage, string errorDetails) : base(errorMessage, errorDetails) { }
+        public VCInvalidAssetPath(string errorMessage, string errorDetails, Exception innerEx) : base(errorMessage, errorDetails, innerEx) { }
     }
 }

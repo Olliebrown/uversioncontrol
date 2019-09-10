@@ -14,7 +14,9 @@ namespace UVC
     {
         static readonly string[] defaultIgnores = 
         { "Library", "Temp", "obj", ".targets.tmp" , "*.booproj", "*.unityproj", "*.csproj", "*.sln", 
-          "*.suo", "*.user", "*.pidb", "*.userprefs", "*.user", "*.ide", "_ReSharper.*", ".vs" };
+          "*.suo", "*.user", "*.pidb", "*.userprefs", "*.user", "*.ide", "_ReSharper.*", ".vs", ".idea",
+          "Logs", "*.git", "*.vscode"
+        };
 
         static VCValidateConfiguration()
         {
@@ -45,13 +47,12 @@ namespace UVC
                 {
                     const string title = "Fix ignores?";
                     const string message = "Do you want UVC to automatically fix file and folder ignores?";
-                    if (EditorUtility.DisplayDialog(title, message, "Fix it", "No"))
+                    if (UserDialog.DisplayDialog(title, message, "Fix it", "No"))
                     {
                         VCCommands.Instance.SetIgnore(workDirectory, defaultIgnores);
                     }
                 }
             }
         }
-
     }
 }

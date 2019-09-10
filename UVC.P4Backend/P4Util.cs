@@ -2,7 +2,6 @@ using System;
 using CommandLineExecution;
 using System.Collections.Generic;
 using System.Linq;
-using UVC;
 
 namespace UVC.Backend.P4
 {
@@ -123,10 +122,10 @@ namespace UVC.Backend.P4
                     }
                     else
                     {
-                        D.Log("ERROR: " + errStr + " " + commandLine.ToString());
+                        DebugLog.Log("ERROR: " + errStr + " " + commandLine.ToString());
                     }
 
-                    //					D.Log(commandLineOutput.OutputStr);
+                    //                    D.Log(commandLineOutput.OutputStr);
                 }
                 //D.Log(commandLineOutput.OutputStr);
             }
@@ -142,11 +141,11 @@ namespace UVC.Backend.P4
                 commandLineOutput = commandLine.Execute();
                 return commandLineOutput;
             }
-			catch (System.Threading.ThreadAbortException) { }
-			catch (AppDomainUnloadedException) { }
+            catch (System.Threading.ThreadAbortException) { }
+            catch (AppDomainUnloadedException) { }
             catch (Exception e)
             {
-                D.Log("ERROR: Check that your commandline P4 client is installed correctly - " + e.Message);
+                DebugLog.Log("ERROR: Check that your commandline P4 client is installed correctly - " + e.Message);
             }
             return null;
         }

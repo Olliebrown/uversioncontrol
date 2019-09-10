@@ -2,7 +2,6 @@
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 
-using UVC.Backend.P4;
 using UnityEngine;
 using UnityEditor;
 using System;
@@ -56,11 +55,11 @@ namespace UVC
                 success = true;
             }
 
-            GoogleAnalytics.LogUserEvent("Backend", string.Format("{0}_{1}", backend.ToString(), (success ? "success" : "failed")));
+            GoogleAnalytics.LogUserEvent("Backend", $"{backend.ToString()}_{(success ? "success" : "failed")}");
 
             if (!success)
             {
-                D.LogWarning(backend + " backend initialization failed!");
+                DebugLog.LogWarning(backend + " backend initialization failed!");
             }
             
             return success;
@@ -80,24 +79,24 @@ namespace UVC
             }
             catch (Exception e)
             {
-                D.ThrowException(e);
+                DebugLog.ThrowException(e);
             }
             finally
             {
                 if (!valid && uvc != null) uvc.Dispose();
             }
-            D.Log("CreateVersionControl took : " + watch.ElapsedMilliseconds + "ms");
+            DebugLog.Log("CreateVersionControl took : " + watch.ElapsedMilliseconds + "ms");
             return valid;
         }
 
         private static bool PromptUserForBackend(VCSettings.EVersionControlBackend backend)
         {
-            return EditorUtility.DisplayDialog("Use " + backend + " ?", "The only valid version control found is '" + backend + "'. \nUse " + backend + " as version control?", "Yes", "No");
+            return UserDialog.DisplayDialog("Use " + backend + " ?", "The only valid version control found is '" + backend + "'. \nUse " + backend + " as version control?", "Yes", "No");
         }
 
         private static IVersionControlCommands AddDecorators(IVersionControlCommands vcc)
         {
-            return new VCCFilteredAssets(new VCCAddMetaFiles(vcc));
+            return new VCCAddMetaFiles(new VCCFilteredAssets(vcc));
         }
     }
 }

@@ -2,7 +2,6 @@
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using UVC.AssetPathFilters;
 
@@ -61,8 +60,6 @@ namespace UVC
             var filesInFolders = ConsistentSlash(assets.AddFilesInFolders(vcc, true).AddedOrUnversionedParentFolders(vcc));
             var deletedInFolders = assets.AddDeletedInFolders(vcc);
 
-            D.Log("Deleted In Folders: " + deletedInFolders.AggregateString());
-
             bool result =
                 base.Add(filesInFolders.UnversionedInVersionedFolder(vcc)) &&
                 base.Delete(filesInFolders.Missing(vcc), OperationMode.Normal) &&
@@ -83,7 +80,7 @@ namespace UVC
 
         public override bool Revert(IEnumerable<string> assets)
         {
-            assets = ConsistentSlash(assets.ShortestFirst());
+            assets = ConsistentSlash(assets.AddFilesInFolders(vcc, true).LongestFirst());
             return assets.Any() ? base.Revert(assets) : true;
         }
 
@@ -101,7 +98,7 @@ namespace UVC
             }
             catch (VCLockedByOther e)
             {
-                D.Log("Locked by other, so requesting remote status on : " + assets.Aggregate((a, b) => a + ", " + b) + "\n" + e.Message);
+                DebugLog.Log("Locked by other, so requesting remote status on : " + assets.Aggregate((a, b) => a + ", " + b) + "\n" + e.Message);
                 RequestStatus(assets, StatusLevel.Remote);
                 return false;
             }
@@ -127,6 +124,12 @@ namespace UVC
         {
             assets = ConsistentSlash(assets.NonEmpty().Versioned(vcc).OnChangeList(vcc));
             return assets.Any() ? base.ChangeListRemove(assets.FilesExist().OnChangeList(vcc).Versioned(vcc)) && Status(assets, StatusLevel.Local) : false;
+        }
+
+        public override bool AllowLocalEdit(IEnumerable<string> assets)
+        {
+            assets = ConsistentSlash(assets.NonEmpty().Versioned(vcc));
+            return assets.Any() ? (base.AllowLocalEdit(assets) && Status(assets, StatusLevel.Local)) : false;
         }
 
         public override bool Move(string from, string to)

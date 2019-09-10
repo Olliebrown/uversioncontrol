@@ -19,5 +19,10 @@ namespace UVC
         public const string diff           = "Diff";
         public const string refresh        = "Refresh";
         public const string localModified  = "Local Modified";
+        public const string branch         = "Branch";
+        public const string merge          = "Merge";
+        public const string switchbranch   = "Switch";
+        public const string createbranch   = "Branch";
+        public const string changelist     = "ChangeList";
     }
 }

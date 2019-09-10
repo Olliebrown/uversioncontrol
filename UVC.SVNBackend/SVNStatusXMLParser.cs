@@ -5,9 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Xml;
-using UnityEngine;
+using Unity.Profiling;
 
 namespace UVC.Backend.SVN
 {
@@ -43,17 +42,21 @@ namespace UVC.Backend.SVN
         };
     }
     #endregion
-    
-    
+
+
     public static class SVNStatusXMLParser
     {
-        //private static readonly ComposedString dot = new ComposedString(".");
-        //private static readonly ComposedString slash = new ComposedString("/");
+        private static ProfilerMarker svnParseStatusXMLMarker = new ProfilerMarker("UVC.SVNParseStatusXML");
+        private static readonly ComposedString dot = new ComposedString(".");
+        private static readonly ComposedString slash = new ComposedString("/");
         public static StatusDatabase SVNParseStatusXML(string svnStatusXML)
         {
-            var xmlStatusDocument = new XmlDocument();
-            xmlStatusDocument.LoadXml(svnStatusXML);
-            return ParseStatusResult(xmlStatusDocument);
+            using (svnParseStatusXMLMarker.Auto())
+            {
+                var xmlStatusDocument = new XmlDocument();
+                xmlStatusDocument.LoadXml(svnStatusXML);
+                return ParseStatusResult(xmlStatusDocument);
+            }
         }
 
         private static StatusDatabase ParseStatusResult(XmlDocument xmlDoc)
@@ -84,6 +87,10 @@ namespace UVC.Backend.SVN
                         if (changelist == SVNCommands.localEditChangeList)
                         {
                             statusDatabase[assetPath].allowLocalEdit = true;
+                        }
+                        if (changelist == SVNCommands.localOnlyChangeList)
+                        {
+                            statusDatabase[assetPath].localOnly = true;
                         }
                     }
                 }
@@ -131,8 +138,8 @@ namespace UVC.Backend.SVN
             XmlElement wcStatus = entryIt["wc-status"];
             if (wcStatus != null)
             {
-                if (wcStatus.Attributes["item"] == null || !SVNToVersionControlStatusMap.fileStatusMap.TryGetValue(wcStatus.Attributes["item"].InnerText, out versionControlStatus.fileStatus)) D.Log("SVN: Unknown file status: " + wcStatus.Attributes["item"].InnerText);
-                if (wcStatus.Attributes["props"] == null || !SVNToVersionControlStatusMap.propertyMap.TryGetValue(wcStatus.Attributes["props"].InnerText, out versionControlStatus.property)) D.Log("SVN: Unknown property: " + wcStatus.Attributes["props"].InnerText);
+                if (wcStatus.Attributes["item"] == null || !SVNToVersionControlStatusMap.fileStatusMap.TryGetValue(wcStatus.Attributes["item"].InnerText, out versionControlStatus.fileStatus)) DebugLog.Log("SVN: Unknown file status: " + wcStatus.Attributes["item"].InnerText);
+                if (wcStatus.Attributes["props"] == null || !SVNToVersionControlStatusMap.propertyMap.TryGetValue(wcStatus.Attributes["props"].InnerText, out versionControlStatus.property)) DebugLog.Log("SVN: Unknown property: " + wcStatus.Attributes["props"].InnerText);
 
                 if (wcStatus.Attributes["revision"] != null) versionControlStatus.revision = Int32.Parse(wcStatus.Attributes["revision"].InnerText);
                 if (wcStatus.Attributes["wc-locked"] != null && wcStatus.Attributes["wc-locked"].InnerText == "true") versionControlStatus.repositoryStatus = VCRepositoryStatus.Locked;
@@ -169,7 +176,7 @@ namespace UVC.Backend.SVN
                     if (lockStatus["token"] != null) versionControlStatus.lockToken = lockStatus["token"].InnerText;
                     versionControlStatus.lockStatus = VCLockStatus.LockedHere;
                 }
-            }            
+            }
             return versionControlStatus;
         }
 
@@ -177,7 +184,7 @@ namespace UVC.Backend.SVN
         {
             if (!Directory.Exists(assetPath))
             {
-                D.LogWarning("Directory not found: " + assetPath);
+                DebugLog.LogWarning("Directory not found: " + assetPath);
                 return new string[] { };
             }
 
@@ -195,7 +202,7 @@ namespace UVC.Backend.SVN
 
 /*
  * 'SVN status --xml' schema
- * 
+ *
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information

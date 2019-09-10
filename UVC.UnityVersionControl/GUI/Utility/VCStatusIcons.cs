@@ -1,14 +1,16 @@
 // Copyright (c) <2017> <Playdead>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
+
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.Experimental.SceneManagement;
 
 namespace UVC.UserInterface
 {
     using Extensions;
     [InitializeOnLoad]
-    internal static class VCStatusIcons
+    public static class VCStatusIcons
     {
         static VCStatusIcons()
         {
@@ -19,7 +21,7 @@ namespace UVC.UserInterface
             VCCommands.Instance.StatusCompleted += RefreshGUI;
             VCSettings.SettingChanged += RefreshGUI;
 
-            // Request repaint of project and hierarchy windows 
+            // Request repaint of project and hierarchy windows
             EditorApplication.RepaintProjectWindow();
             EditorApplication.RepaintHierarchyWindow();
 
@@ -49,15 +51,17 @@ namespace UVC.UserInterface
             }
             else
             {
-                var objectIndirection = ObjectUtilities.GetObjectIndirection(obj);
-                //string sceneAssetPath = ObjectUtilities.ObjectToAssetPath(obj, false);
-                //DrawIcon(selectionRect, IconUtils.childIcon, sceneAssetPath, null, -20f);
-
-                if (ObjectUtilities.ChangesStoredInPrefab(obj) && VCSettings.PrefabGUI)
+                var currentPrefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+                if (currentPrefabStage != null)
                 {
-                    string prefabPath = obj.GetAssetPath();
-                    VCUtility.RequestStatus(prefabPath, VCSettings.HierarchyReflectionMode);
-                    DrawIcon(selectionRect, IconUtils.squareIcon, prefabPath, objectIndirection);
+                    var go = obj as GameObject;
+                    if (go)
+                    {
+                        if (PrefabStageUtility.GetCurrentPrefabStage().prefabContentsRoot == go)
+                        {
+                            DrawIcon(selectionRect, IconUtils.squareIcon, PrefabStageUtility.GetCurrentPrefabStage().prefabAssetPath, PrefabStageUtility.GetCurrentPrefabStage().prefabContentsRoot, 0f);
+                        }
+                    }
                 }
             }
         }
@@ -106,7 +110,7 @@ namespace UVC.UserInterface
             return false;
         }
 
-        private static void DrawIcon(Rect rect, IconUtils.Icon iconType, string assetPath, Object instance = null, float xOffset = 0f)
+        public static void DrawIcon(Rect rect, IconUtils.Icon iconType, string assetPath, Object instance = null, float xOffset = 0f)
         {
             if (VCSettings.VCEnabled)
             {
@@ -121,7 +125,7 @@ namespace UVC.UserInterface
                 if (texture) GUI.DrawTexture(placement, texture);
                 if (GUI.Button(clickRect, new GUIContent("", statusText), GUIStyle.none))
                 {
-                    VCGUIControls.DiaplayVCContextMenu(assetPath, instance, 10.0f, -40.0f, true);
+                    VCGUIControls.DisplayVCContextMenu(assetPath, instance, 10.0f, -40.0f, true);
                 }
             }
         }

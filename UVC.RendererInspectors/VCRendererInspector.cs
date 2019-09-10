@@ -1,4 +1,4 @@
-﻿// Copyright (c) <2017> <Playdead>
+// Copyright (c) <2017> <Playdead>
 // This file is subject to the MIT License as seen in the trunk of this repository
 // Maintained by: <Kristian Kjems> <kristian.kjems+UnityVC@gmail.com>
 using System.IO;
@@ -71,9 +71,9 @@ namespace UVC.UserInterface
                 VCGUIControls.VersionControlStatusGUI(
                     style:                      buttonStyle, 
                     assetStatus:                assetStatus, obj: material, 
-                    showAddCommit:              !builtinMaterial && (validActions.showAdd || validActions.showCommit), 
-                    showLockAndAllowLocalEdit:  !builtinMaterial && (validActions.showOpenLocal || validActions.showOpen), 
-                    showRevert:                 !builtinMaterial && validActions.showRevert
+                    showAddCommit:              !builtinMaterial && (validActions & (ValidActions.Add | ValidActions.Commit)) != 0, 
+                    showLockAndAllowLocalEdit:  !builtinMaterial && (validActions & (ValidActions.OpenLocal | ValidActions.Open)) != 0, 
+                    showRevert:                 !builtinMaterial && (validActions & ValidActions.Revert) != 0
                 );
 
                 EditorGUILayout.EndHorizontal();
