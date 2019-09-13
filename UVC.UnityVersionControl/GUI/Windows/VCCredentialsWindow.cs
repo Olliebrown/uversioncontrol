@@ -45,7 +45,7 @@ namespace UVC.UserInterface
                 if (hasVerified && success) passwordColor = Color.green;
                 using (GUILayoutHelper.BackgroundColor(passwordColor))
                 {
-                    password = EditorGUILayout.TextField("Password", password);
+                    password = EditorGUILayout.PasswordField("Password", password);
                 }
 
                 allowCacheCredentials = GUILayout.Toggle(allowCacheCredentials, new GUIContent("Allow Credentials to be cached"));
